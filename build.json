@@ -1,0 +1,12 @@
+{
+  "employees": [
+    {
+      "name": "Josna",
+      "content": "Josna lives in USA"
+    },
+    {
+      "name": "Aditya",
+      "content": "Aditya lives in UK"
+    }
+  ]
+}
