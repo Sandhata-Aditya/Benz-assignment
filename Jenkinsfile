@@ -1,11 +1,14 @@
 pipeline {
   agent any
   parameters {
-    booleanParam description: 'Static_Check', name: 'Static_Check'
-    booleanParam description: 'QA', name: 'QA'
-    booleanParam description: 'Unit_Test', name: 'Unit_Test'
-    string defaultValue: 'jotsnaram@gmail.com', description: 'Success_Email', name: 'Success_Email'
-    string defaultValue: 'jotsnaram@gmail.com', description: 'Failure_Email', name: 'Failure_Email'
+    booleanParam description: 'Perform Static Check?', name: 'Static_Check'
+    booleanParam description: 'Do you wanna run in QA environment?', name: 'QA'
+    booleanParam description: 'Do you wanna perform unit testing?', name: 'Unit_Test'
+    string defaultValue: 'jotsnaram@gmail.com', description: 'Mention emails to send success status', name: 'Success_Email'
+    string defaultValue: 'jotsnaram@gmail.com', description: 'Mention emails to send failure status', name: 'Failure_Email'
+  }
+  environment{
+      HOLIDAY_API_URL = "https://calendarific.com/api/v2/holidays?&api_key=90e19de04681bc27e9492b478df436f43aed8c4c&country=IN&year=2022"
   }
 
   stages {
@@ -13,7 +16,7 @@ pipeline {
     stage("Is the run required") {
       steps {
         script {
-          env.IS_HOLIDAY = isTodayHoliday()
+          env.IS_HOLIDAY = isHoliday()
         }
       }
     }
@@ -24,15 +27,13 @@ pipeline {
       }
       steps {
         script {
-          echo "Welcome...Build"
+          echo "Build Stage started"
           def empJson = readJSON file: 'build.json'
           print empJson.employees
           empJson.employees.each {
             item ->
               dir('builds') {
                 writeFile file: "${item.name}.txt", text: "${item.content}"
-                echo "Name-- ${item.name}"
-                echo "Content ${item.content}"
               }
           }
           if (fileExists('builds.zip')) {
@@ -44,7 +45,7 @@ pipeline {
       }
     }
 
-    stage(" ") {
+    stage("Quality & QA & Unit Test") {
       parallel {
 
         stage("Quality") {
@@ -76,7 +77,6 @@ pipeline {
                 unzip dir: 'QA', glob: '', zipFile: 'builds.zip'
               }
             }
-
           }
 
         }
@@ -105,15 +105,12 @@ pipeline {
           if (env.IS_HOLIDAY == "false") {
             if (params.Unit_Test == true) {
               echo "Unit_test executed..."
-              sh "ls Unit_Test"
             }
             if (params.QA == true) {
               echo "QA executed..."
-              sh "ls QA"
             }
             if (params.Static_Check == true) {
               echo "Static_Check executed..."
-              sh "ls Static_Check"
             }
           }
         }
@@ -124,24 +121,27 @@ pipeline {
   }
   post {
     success {
-      echo "send email"
-      mail body: 'Build success', subject: 'Build Success', to: params.Success_Email
+      echo "Success email"
+      //mail body: 'Build success', subject: 'Build Success', to: params.Success_Email
     }
     failure {
-      mail body: 'Build Failed', subject: 'Build Success', to: params.Failure_Email
+        echo "Failure email"
+      // mail body: 'Build Failed', subject: 'Build Success', to: params.Failure_Email
     }
   }
 }
 
-def isTodayHoliday() {
-  def dates = []
-  def response = httpRequest 'https://calendarific.com/api/v2/holidays?&api_key=90e19de04681bc27e9492b478df436f43aed8c4c&country=IN&year=2021'
+def isHoliday() {
+  def response = httpRequest url: env.HOLIDAY_API_URL, httpMode: 'GET'
   println("Status: " + response.status)
   def jsonObj = readJSON text: response.content
+  def holidays = []
   for (holiday in jsonObj.response.holidays) {
-    dates.add(holiday.date.iso.split('T')[0])
+    // few dates are in this format "2021-09-23T00:51:11+05:30", so splitting it 
+    holidays.add(holiday.date.iso.split('T')[0])
   }
-  def now = new Date()
-  def currentDate = now.format("yyyy-MM-dd", TimeZone.getTimeZone('UTC'))
-  return dates.contains(currentDate)
+  def today = new Date()
+  today = today.format("yyyy-MM-dd", TimeZone.getTimeZone('UTC'))
+
+  return holidays.contains(today)
 }
